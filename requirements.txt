@@ -1,5 +1,12 @@
 streamlit
 pandas
-uvicorn
+uvicorn[standard]
 fastapi
 pytest
+sqlalchemy==2.0.36
+python-jose[cryptography]==3.4.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.30
+aiofiles==23.2.1
+pydantic[email]
+

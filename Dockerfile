@@ -1,20 +1,15 @@
 FROM python:3.9-slim
 
-
 WORKDIR /app
-
 
 COPY . /app
 
-
 RUN pip install --no-cache-dir -r requirements.txt
 
+EXPOSE 8000
 
-EXPOSE 8501
+ENV SECRET_KEY="change-me-in-production"
+ENV DATABASE_URL="sqlite:///./bikeapp.db"
+ENV UPLOAD_DIR="data/uploads"
 
-
-ENV STREAMLIT_SERVER_PORT=8501
-
-ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
-
-CMD ["streamlit", "run", "app.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
