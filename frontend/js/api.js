@@ -16,7 +16,7 @@ export const Auth = {
 
 async function request(method, path, body, isFormData = false) {
   const headers = {};
-  if (_token) headers['Authorization'] = `******;
+  if (_token) headers['Authorization'] = 'Bearer ' + _token;
   if (!isFormData && body) headers['Content-Type'] = 'application/json';
 
   const res = await fetch(`${BASE}${path}`, {
@@ -44,7 +44,7 @@ const del  = (path)         => request('DELETE',  path);
 export async function register(formData) {
   const res = await fetch(`${BASE}/api/auth/register`, {
     method: 'POST',
-    headers: _token ? { Authorization: `****** } : {},
+    headers: _token ? { Authorization: 'Bearer ' + _token } : {},
     body: formData,
   });
   const data = await res.json().catch(() => ({}));
