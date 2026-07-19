@@ -10,3 +10,4 @@ python-multipart==0.0.30
 aiofiles==23.2.1
 pydantic[email]
 
+httpx2

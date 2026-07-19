@@ -1,0 +1,34 @@
+name: pedalshare
+description: Peer-to-peer bike rental and redistribution — iOS & Android app.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Navigation
+  go_router: ^14.0.0
+
+  # HTTP / API
+  http: ^1.2.0
+
+  # Token storage
+  shared_preferences: ^2.3.0
+
+  # Image picking (ID upload, selfie)
+  image_picker: ^1.1.0
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

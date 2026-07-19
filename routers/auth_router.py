@@ -1,23 +1,21 @@
 import os
 import uuid
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from database import get_db
-from auth import hash_password, verify_password, create_access_token, get_current_user
+from auth import hash_password, verify_password, create_access_token
 import models
 import schemas
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 async def _save_upload(file: UploadFile, subfolder: str) -> str:
-    """Save an uploaded file and return its relative URL path."""
     dest = os.path.join(UPLOAD_DIR, subfolder)
     os.makedirs(dest, exist_ok=True)
     ext = os.path.splitext(file.filename or "")[-1] or ".bin"
@@ -30,34 +28,36 @@ async def _save_upload(file: UploadFile, subfolder: str) -> str:
 
 @router.post("/register", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
-    name: str,
-    email: str,
-    password: str,
-    id_photo: UploadFile = File(..., description="Government-issued ID image"),
-    face_photo: UploadFile = File(..., description="Selfie / face photo"),
+    name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(..., min_length=8),
+    id_document: UploadFile = File(..., description="Government-issued ID"),
+    selfie: UploadFile = File(..., description="Selfie / face photo"),
     db: Session = Depends(get_db),
 ):
-    """Register a new user with ID and face photo uploads.
-    Account is created in unverified state pending admin review.
-    """
+    """Register. Account is unverified until admin reviews ID + selfie."""
     if db.query(models.User).filter(models.User.email == email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
-    id_url = await _save_upload(id_photo, "id_photos")
-    face_url = await _save_upload(face_photo, "face_photos")
+    id_url = await _save_upload(id_document, "id_documents")
+    selfie_url = await _save_upload(selfie, "selfies")
 
     user = models.User(
         name=name,
         email=email,
         password_hash=hash_password(password),
-        id_photo_url=id_url,
-        face_photo_url=face_url,
+        id_document_url=id_url,
+        selfie_url=selfie_url,
         verified=False,
     )
     db.add(user)
+    db.flush()
+
+    gamification = models.UserGamification(user_id=user.id)
+    db.add(gamification)
     db.commit()
     db.refresh(user)
-    return user
+    return _user_out(user)
 
 
 @router.post("/login", response_model=schemas.TokenResponse)
@@ -65,7 +65,6 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """Login with email + password, receive JWT access token."""
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
@@ -75,3 +74,18 @@ def login(
         )
     token = create_access_token({"sub": str(user.id)})
     return schemas.TokenResponse(access_token=token)
+
+
+def _user_out(user: models.User) -> schemas.UserOut:
+    return schemas.UserOut(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        id_document_url=user.id_document_url,
+        selfie_url=user.selfie_url,
+        verified=user.verified,
+        role=user.role,
+        rating=user.rating,
+        points_balance=user.points_balance,
+        created_at=user.created_at,
+    )

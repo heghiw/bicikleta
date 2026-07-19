@@ -7,28 +7,20 @@ from auth import get_current_user, require_admin
 import models
 import schemas
 
-router = APIRouter(prefix="/shop", tags=["shop"])
+router = APIRouter(prefix="/api/shop", tags=["shop"])
 
-
-# ---------------------------------------------------------------------------
-# Public / user endpoints
-# ---------------------------------------------------------------------------
 
 @router.get("/offers", response_model=List[schemas.PartnerOfferOut])
 def list_offers(
+    _: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    _user: models.User = Depends(get_current_user),
 ):
-    """List all active partner offers (discount code hidden until redeemed)."""
     offers = db.query(models.PartnerOffer).filter(models.PartnerOffer.active == True).all()  # noqa: E712
     return [
         schemas.PartnerOfferOut(
-            id=o.id,
-            partner_name=o.partner_name,
-            description=o.description,
-            points_cost=o.points_cost,
-            active=o.active,
-            discount_code=None,  # hidden
+            id=o.id, partner_name=o.partner_name, title=o.title,
+            description=o.description, points_cost=o.points_cost,
+            quantity=o.quantity, active=o.active, discount_code=None,
         )
         for o in offers
     ]
@@ -37,32 +29,41 @@ def list_offers(
 @router.post("/offers/{offer_id}/redeem", response_model=schemas.RedemptionOut)
 def redeem_offer(
     offer_id: int,
-    db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Spend points to redeem a partner discount.  Returns the discount code."""
     offer = db.query(models.PartnerOffer).filter(
         models.PartnerOffer.id == offer_id,
         models.PartnerOffer.active == True,  # noqa: E712
     ).first()
     if not offer:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found or inactive")
+        raise HTTPException(status_code=404, detail="Offer not found or inactive")
 
-    if current_user.points_balance < offer.points_cost:
+    if offer.quantity is not None and offer.quantity <= 0:
+        raise HTTPException(status_code=410, detail="Offer is sold out")
+
+    balance = current_user.points_balance
+    if balance < offer.points_cost:
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Insufficient points. Need {offer.points_cost}, have {current_user.points_balance}.",
+            status_code=402,
+            detail=f"Insufficient points. Need {offer.points_cost}, have {balance}.",
         )
 
-    current_user.points_balance -= offer.points_cost
     tx = models.PointTransaction(
         user_id=current_user.id,
-        delta=-offer.points_cost,
-        reason=f"Redemption: {offer.partner_name} offer #{offer.id}",
+        type=models.PointType.spent,
+        amount=-offer.points_cost,
+        description=f"Redeemed: {offer.partner_name} — {offer.title}",
     )
-    redemption = models.Redemption(user_id=current_user.id, offer_id=offer.id)
+    redemption = models.Redemption(
+        user_id=current_user.id,
+        offer_id=offer.id,
+        points_spent=offer.points_cost,
+    )
     db.add(tx)
     db.add(redemption)
+    if offer.quantity is not None:
+        offer.quantity -= 1
     db.commit()
     db.refresh(redemption)
 
@@ -70,33 +71,29 @@ def redeem_offer(
         id=redemption.id,
         offer_id=offer.id,
         partner_name=offer.partner_name,
+        title=offer.title,
         discount_code=offer.discount_code,
+        points_spent=offer.points_cost,
         redeemed_at=redemption.redeemed_at,
     )
 
 
-# ---------------------------------------------------------------------------
-# Admin endpoints
-# ---------------------------------------------------------------------------
-
-@router.post("/offers", response_model=schemas.PartnerOfferOut, status_code=status.HTTP_201_CREATED)
+# Admin
+@router.post("/offers", response_model=schemas.PartnerOfferOut, status_code=201)
 def create_offer(
     body: schemas.PartnerOfferCreate,
     db: Session = Depends(get_db),
-    _admin: models.User = Depends(require_admin),
+    _: models.User = Depends(require_admin),
 ):
-    """Admin-only: create a new partner offer."""
     offer = models.PartnerOffer(**body.model_dump())
     db.add(offer)
     db.commit()
     db.refresh(offer)
     return schemas.PartnerOfferOut(
-        id=offer.id,
-        partner_name=offer.partner_name,
-        description=offer.description,
-        points_cost=offer.points_cost,
-        active=offer.active,
-        discount_code=offer.discount_code,  # visible to admin
+        id=offer.id, partner_name=offer.partner_name, title=offer.title,
+        description=offer.description, points_cost=offer.points_cost,
+        quantity=offer.quantity, active=offer.active,
+        discount_code=offer.discount_code,
     )
 
 
@@ -105,35 +102,31 @@ def update_offer(
     offer_id: int,
     body: schemas.PartnerOfferUpdate,
     db: Session = Depends(get_db),
-    _admin: models.User = Depends(require_admin),
+    _: models.User = Depends(require_admin),
 ):
-    """Admin-only: update an existing partner offer."""
     offer = db.query(models.PartnerOffer).filter(models.PartnerOffer.id == offer_id).first()
     if not offer:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
+        raise HTTPException(status_code=404, detail="Offer not found")
     for field, val in body.model_dump(exclude_none=True).items():
         setattr(offer, field, val)
     db.commit()
     db.refresh(offer)
     return schemas.PartnerOfferOut(
-        id=offer.id,
-        partner_name=offer.partner_name,
-        description=offer.description,
-        points_cost=offer.points_cost,
-        active=offer.active,
+        id=offer.id, partner_name=offer.partner_name, title=offer.title,
+        description=offer.description, points_cost=offer.points_cost,
+        quantity=offer.quantity, active=offer.active,
         discount_code=offer.discount_code,
     )
 
 
-@router.delete("/offers/{offer_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/offers/{offer_id}", status_code=204)
 def delete_offer(
     offer_id: int,
     db: Session = Depends(get_db),
-    _admin: models.User = Depends(require_admin),
+    _: models.User = Depends(require_admin),
 ):
-    """Admin-only: permanently delete a partner offer."""
     offer = db.query(models.PartnerOffer).filter(models.PartnerOffer.id == offer_id).first()
     if not offer:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
+        raise HTTPException(status_code=404, detail="Offer not found")
     db.delete(offer)
     db.commit()

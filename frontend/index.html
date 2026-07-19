@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PedalShare — Rent. Ride. Earn.</title>
+  <meta name="description" content="The peer-to-peer bike rental and redistribution network. Rent a bike, move one for rewards, or list yours to earn money.">
+  <meta name="theme-color" content="#16A34A">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚲</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- ── Navigation ─────────────────────────────────────────────── -->
+<nav class="nav" role="navigation">
+  <div class="nav-inner">
+    <div class="nav-logo" onclick="navigate('')" style="cursor:pointer">
+      🚲 PedalShare
+    </div>
+    <div class="nav-links" id="nav-links"></div>
+    <div class="nav-auth flex gap-2 items-center" id="nav-auth">
+      <button class="btn btn-outline btn-sm" onclick="openModal('login')">Log in</button>
+      <button class="btn btn-primary btn-sm" onclick="openModal('register')">Sign up free</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── SPA root ──────────────────────────────────────────────── -->
+<main id="app" class="page">
+  <div class="loading-center"><div class="spinner"></div></div>
+</main>
+
+<!-- ── Auth modal ─────────────────────────────────────────────── -->
+<div id="modal-backdrop" class="modal-backdrop hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Toast container ────────────────────────────────────────── -->
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- ── Footer ──────────────────────────────────────────────────── -->
+<footer style="background:var(--surface);border-top:1px solid var(--border);padding:24px 0;margin-top:auto">
+  <div class="container flex justify-between items-center" style="flex-wrap:wrap;gap:12px">
+    <div style="font-weight:700;color:var(--primary)">🚲 PedalShare</div>
+    <div style="font-size:13px;color:var(--text-3)">© 2025 PedalShare. Zero-emission urban mobility.</div>
+    <div style="display:flex;gap:16px;font-size:13px;color:var(--text-3)">
+      <a href="#" style="color:var(--text-3)">Privacy</a>
+      <a href="#" style="color:var(--text-3)">Terms</a>
+      <a href="/docs" style="color:var(--text-3)">API</a>
+    </div>
+  </div>
+</footer>
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
