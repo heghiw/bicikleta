@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Runtime data and secrets
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+data/uploads/
+artifacts/
+project.zip
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/ephemeral/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

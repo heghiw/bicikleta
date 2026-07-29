@@ -6,8 +6,10 @@ pytest
 sqlalchemy==2.0.36
 python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 python-multipart==0.0.30
 aiofiles==23.2.1
 pydantic[email]
+stripe>=12,<15
 
-httpx2
+httpx==0.28.1

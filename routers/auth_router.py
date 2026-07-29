@@ -11,18 +11,29 @@ import models
 import schemas
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
+MAX_VERIFICATION_FILE_BYTES = 10 * 1024 * 1024
+VERIFICATION_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "application/pdf": ".pdf",
+}
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 async def _save_upload(file: UploadFile, subfolder: str) -> str:
+    ext = VERIFICATION_EXTENSIONS.get(file.content_type or "")
+    if not ext or (subfolder == "selfies" and file.content_type == "application/pdf"):
+        raise HTTPException(status_code=415, detail="Unsupported verification file type")
+    content = await file.read(MAX_VERIFICATION_FILE_BYTES + 1)
+    if len(content) > MAX_VERIFICATION_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="Verification files must be 10 MB or smaller")
     dest = os.path.join(UPLOAD_DIR, subfolder)
     os.makedirs(dest, exist_ok=True)
-    ext = os.path.splitext(file.filename or "")[-1] or ".bin"
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(dest, filename)
     async with aiofiles.open(filepath, "wb") as f:
-        await f.write(await file.read())
+        await f.write(content)
     return f"/uploads/{subfolder}/{filename}"
 
 

@@ -1,5 +1,8 @@
 import math
+import hashlib
+import hmac
 import json
+import os
 import enum
 from datetime import date, datetime
 from sqlalchemy import (
@@ -117,12 +120,21 @@ class Bike(Base):
     current_lat = Column(Float, nullable=False)
     current_lon = Column(Float, nullable=False)
     status = Column(Enum(BikeStatus), default=BikeStatus.available)
+    lock_type = Column(String(20), default="manual", nullable=False)
+    lock_instructions = Column(Text, nullable=True)
+    smart_lock_provider = Column(String(80), nullable=True)
+    smart_lock_device_id = Column(String(200), nullable=True)
+    smart_lock_status = Column(String(30), default="not_connected", nullable=False)
+    qr_version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="bikes", foreign_keys=[owner_id])
     rentals = relationship("Rental", back_populates="bike")
     delivery_jobs = relationship("DeliveryJob", back_populates="bike")
     reviews = relationship("Review", back_populates="bike")
+    gps_device = relationship(
+        "GPSDevice", back_populates="bike", uselist=False, cascade="all, delete-orphan"
+    )
 
     @property
     def photo_urls(self):
@@ -143,6 +155,13 @@ class Bike(Base):
             return 0.0
         return sum(r.rating for r in self.reviews) / len(self.reviews)
 
+    @property
+    def identity_qr(self) -> str:
+        secret = os.getenv("BIKE_QR_SECRET", "bicikleta-development-secret")
+        payload = f"{self.id}:{self.qr_version}"
+        signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:12]
+        return f"BICI:{payload}:{signature}"
+
 
 class Rental(Base):
     __tablename__ = "rentals"
@@ -159,6 +178,12 @@ class Rental(Base):
     total_price = Column(Float, default=0.0)
     status = Column(Enum(RentalStatus), default=RentalStatus.pending)
     created_at = Column(DateTime, default=datetime.utcnow)
+    return_photo_url = Column(String(512), nullable=True)
+    lock_confirmed = Column(Boolean, default=False)
+    payment_provider = Column(String(30), default="demo", nullable=False)
+    payment_intent_id = Column(String(200), nullable=True)
+    payment_status = Column(String(40), default="not_started", nullable=False)
+    authorized_amount = Column(Float, default=0.0)
 
     bike = relationship("Bike", back_populates="rentals")
     renter = relationship("User", back_populates="rentals", foreign_keys=[renter_id])
@@ -219,6 +244,27 @@ class GPSLog(Base):
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+class GPSDevice(Base):
+    """Tracker pairing metadata. Provider credentials belong in a secret store."""
+    __tablename__ = "gps_devices"
+    __table_args__ = (UniqueConstraint("provider", "provider_device_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    bike_id = Column(Integer, ForeignKey("bikes.id"), unique=True, nullable=False)
+    provider = Column(String(80), nullable=False)
+    provider_device_id = Column(String(200), nullable=False)
+    connection_type = Column(String(30), nullable=False, default="rest")
+    status = Column(String(30), nullable=False, default="pending_validation")
+    installation_status = Column(String(30), nullable=False, default="pending")
+    battery_level = Column(Float, nullable=True)
+    signal_strength = Column(Float, nullable=True)
+    firmware_version = Column(String(80), nullable=True)
+    last_seen_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    bike = relationship("Bike", back_populates="gps_device")
 
 
 class PointTransaction(Base):

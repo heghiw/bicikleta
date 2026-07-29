@@ -1,5 +1,7 @@
+import os
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -7,7 +9,8 @@ from auth import get_current_user, require_admin
 import models
 import schemas
 
-router = APIRouter(prefix="/api/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["users"])
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
 
 
 def _user_out(user: models.User) -> schemas.UserOut:
@@ -28,6 +31,32 @@ def _user_out(user: models.User) -> schemas.UserOut:
 @router.get("/me", response_model=schemas.UserOut)
 def get_profile(current_user: models.User = Depends(get_current_user)):
     return _user_out(current_user)
+
+
+@router.get("/{user_id}/verification-files/{kind}", response_class=FileResponse)
+def get_verification_file(
+    user_id: int,
+    kind: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.id != user_id and current_user.role != models.UserRole.admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view this file")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    relative_url = {
+        "document": user.id_document_url,
+        "selfie": user.selfie_url,
+    }.get(kind)
+    if not relative_url:
+        raise HTTPException(status_code=404, detail="Verification file not found")
+    relative_path = relative_url.removeprefix("/uploads/")
+    path = os.path.abspath(os.path.join(UPLOAD_DIR, relative_path))
+    upload_root = os.path.abspath(UPLOAD_DIR) + os.sep
+    if not path.startswith(upload_root) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Verification file not found")
+    return FileResponse(path)
 
 
 @router.patch("/me", response_model=schemas.UserOut)

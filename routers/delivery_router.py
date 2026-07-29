@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List
+import math
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -9,7 +10,7 @@ import models
 import schemas
 from models import _haversine
 
-router = APIRouter(prefix="/api/delivery", tags=["delivery"])
+router = APIRouter(prefix="/delivery", tags=["delivery"])
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,67 @@ def search_jobs(
             results.append(job)
     results.sort(key=lambda j: j.reward_points, reverse=True)
     return results
+
+
+@router.post("/jobs/directional-search", response_model=List[schemas.DirectionalDeliveryMatchOut])
+def directional_search_jobs(
+    body: schemas.DirectionalDeliverySearchRequest,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Find open bike moves aligned with a user's planned journey."""
+    route_km = _haversine(body.origin_lat, body.origin_lon,
+                          body.destination_lat, body.destination_lon)
+    if route_km < 0.1:
+        raise HTTPException(status_code=400, detail="Origin and destination are too close")
+
+    matches = []
+    jobs = db.query(models.DeliveryJob).filter(
+        models.DeliveryJob.status == models.DeliveryJobStatus.open
+    ).all()
+    for job in jobs:
+        pickup_progress, pickup_corridor_km = _route_projection(
+            body.origin_lat, body.origin_lon, body.destination_lat,
+            body.destination_lon, job.pickup_lat, job.pickup_lon)
+        drop_progress, drop_corridor_km = _route_projection(
+            body.origin_lat, body.origin_lon, body.destination_lat,
+            body.destination_lon, job.dropoff_lat, job.dropoff_lon)
+        if pickup_corridor_km > body.max_detour_km or drop_progress <= pickup_progress:
+            continue
+
+        pickup_distance = _haversine(body.origin_lat, body.origin_lon,
+                                     job.pickup_lat, job.pickup_lon)
+        if drop_progress <= 1.0 and drop_corridor_km <= body.max_detour_km:
+            completion_type = "full"
+            suggested_lat, suggested_lon = job.dropoff_lat, job.dropoff_lon
+            carried_km = job.distance_km
+            journey_km = pickup_distance + job.distance_km + _haversine(
+                job.dropoff_lat, job.dropoff_lon,
+                body.destination_lat, body.destination_lon)
+        else:
+            completion_type = "partial"
+            suggested_lat, suggested_lon = body.destination_lat, body.destination_lon
+            carried_km = _haversine(job.pickup_lat, job.pickup_lon,
+                                    suggested_lat, suggested_lon)
+            journey_km = pickup_distance + carried_km
+
+        added_km = max(0.0, journey_km - route_km)
+        if added_km > body.max_detour_km:
+            continue
+        share = min(1.0, carried_km / job.distance_km) if job.distance_km else 1.0
+        matches.append({
+            "job": job,
+            "completion_type": completion_type,
+            "pickup_distance_km": round(pickup_distance, 2),
+            "added_distance_km": round(added_km, 2),
+            "route_progress": round(max(0.0, min(1.0, pickup_progress)), 3),
+            "suggested_dropoff_lat": suggested_lat,
+            "suggested_dropoff_lon": suggested_lon,
+            "estimated_reward_points": max(1, int(job.reward_points * share)),
+        })
+    matches.sort(key=lambda item: (item["added_distance_km"],
+                                   -item["estimated_reward_points"]))
+    return matches[:body.limit]
 
 
 @router.get("/jobs/{job_id}", response_model=schemas.DeliveryJobOut)
@@ -212,6 +274,24 @@ def list_my_segments(current_user: models.User = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _route_projection(origin_lat, origin_lon, destination_lat, destination_lon,
+                      point_lat, point_lon) -> tuple[float, float]:
+    mean_lat = math.radians((origin_lat + destination_lat) / 2)
+    scale_x, scale_y = 111.32 * math.cos(mean_lat), 110.57
+    route_x = (destination_lon - origin_lon) * scale_x
+    route_y = (destination_lat - origin_lat) * scale_y
+    point_x = (point_lon - origin_lon) * scale_x
+    point_y = (point_lat - origin_lat) * scale_y
+    length_sq = route_x * route_x + route_y * route_y
+    if length_sq == 0:
+        return 0.0, math.hypot(point_x, point_y)
+    progress = (point_x * route_x + point_y * route_y) / length_sq
+    clamped = max(0.0, min(1.0, progress))
+    corridor = math.hypot(point_x - clamped * route_x,
+                          point_y - clamped * route_y)
+    return progress, corridor
+
 
 def _get_job_or_404(db: Session, job_id: int) -> models.DeliveryJob:
     job = db.query(models.DeliveryJob).filter(models.DeliveryJob.id == job_id).first()

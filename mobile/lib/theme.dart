@@ -1,140 +1,159 @@
 import 'package:flutter/material.dart';
 
-const _green = Color(0xFF16A34A);
-const _greenLight = Color(0xFFDCFCE7);
-const _greenDark = Color(0xFF166534);
-const _bg = Color(0xFFF9FAFB);
-const _surface = Color(0xFFFFFFFF);
-const _text1 = Color(0xFF111827);
-const _text2 = Color(0xFF374151);
-const _text3 = Color(0xFF6B7280);
-const _border = Color(0xFFE5E7EB);
+// Bicikleta's product palette: neutral graphite surfaces with one crisp accent.
+const psOrange = Color(0xFF088F8F);
+const psOrangeSoft = Color(0xFFCCFBF1);
+const psOrangeDark = Color(0xFF115E59);
+const psBackground = Color(0xFFF5F5F4);
+const psSurface = Color(0xFFFFFFFF);
+const psText = Color(0xFF1C1917);
+const psMuted = Color(0xFF78716C);
+const psBorder = Color(0xFFE7E5E4);
 
-ThemeData buildTheme() {
+ThemeData buildTheme() => _theme(Brightness.light);
+ThemeData buildDarkTheme() => _theme(Brightness.dark);
+
+ThemeData _theme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  final background = dark ? const Color(0xFF111111) : psBackground;
+  final surface = dark ? const Color(0xFF1C1C1C) : psSurface;
+  final surfaceHigh = dark ? const Color(0xFF262626) : const Color(0xFFFAFAF9);
+  final text = dark ? const Color(0xFFF5F5F4) : psText;
+  final muted = dark ? const Color(0xFFA8A29E) : psMuted;
+  final border = dark ? const Color(0xFF383838) : psBorder;
+  final scheme = ColorScheme.fromSeed(
+    seedColor: psOrange,
+    brightness: brightness,
+    primary: psOrange,
+    onPrimary: Colors.white,
+    secondary: dark ? const Color(0xFF123C3A) : psOrangeSoft,
+    onSecondary: dark ? const Color(0xFF5EEAD4) : psOrangeDark,
+    surface: surface,
+    onSurface: text,
+  );
+
   return ThemeData(
     useMaterial3: true,
-    scaffoldBackgroundColor: _bg,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: _green,
-      primary: _green,
-      onPrimary: Colors.white,
-      secondary: _greenLight,
-      onSecondary: _greenDark,
-      background: _bg,
-      surface: _surface,
-      onSurface: _text1,
-    ),
-    fontFamily: 'SF Pro Display',
-    appBarTheme: const AppBarTheme(
-      backgroundColor: _surface,
-      foregroundColor: _text1,
+    brightness: brightness,
+    scaffoldBackgroundColor: background,
+    colorScheme: scheme,
+    textTheme: (dark ? ThemeData.dark().textTheme : ThemeData.light().textTheme)
+        .apply(bodyColor: text, displayColor: text),
+    appBarTheme: AppBarTheme(
+      backgroundColor: surface,
+      foregroundColor: text,
       elevation: 0,
-      scrolledUnderElevation: 1,
+      scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(
-        fontFamily: 'SF Pro Display',
-        fontSize: 18,
-        fontWeight: FontWeight.w800,
-        color: _text1,
-      ),
+      titleTextStyle:
+          TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: text),
     ),
-    cardTheme: CardTheme(
-      color: _surface,
+    cardTheme: CardThemeData(
+      color: surface,
       elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: _border),
-      ),
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: border)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: _surface,
+      fillColor: surfaceHigh,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _border),
-      ),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: border)),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _border),
-      ),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: border)),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _green, width: 1.5),
-      ),
-      labelStyle: const TextStyle(color: _text3, fontSize: 14),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: psOrange, width: 1.5)),
+      labelStyle: TextStyle(color: muted, fontSize: 14),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
+    filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+      backgroundColor: psOrange,
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+    )),
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: _green,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        textStyle: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    ),
+        style: ElevatedButton.styleFrom(
+      backgroundColor: psOrange,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+    )),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _text1,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        side: const BorderSide(color: _border),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    ),
+        style: OutlinedButton.styleFrom(
+      foregroundColor: text,
+      side: BorderSide(color: border),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+    )),
     chipTheme: ChipThemeData(
-      backgroundColor: _greenLight,
-      labelStyle: const TextStyle(color: _greenDark, fontWeight: FontWeight.w600, fontSize: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      side: BorderSide.none,
+        backgroundColor: dark ? const Color(0xFF153836) : psOrangeSoft,
+        labelStyle: TextStyle(
+            color: dark ? const Color(0xFF5EEAD4) : psOrangeDark,
+            fontWeight: FontWeight.w600,
+            fontSize: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        side: BorderSide.none),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: surface,
+      indicatorColor: dark ? const Color(0xFF134E4A) : psOrangeSoft,
+      indicatorShape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 0,
+      height: 68,
+      labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
+          color: s.contains(WidgetState.selected) ? psOrange : muted,
+          fontSize: 11,
+          fontWeight: s.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500)),
     ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: _surface,
-      selectedItemColor: _green,
-      unselectedItemColor: _text3,
-      elevation: 8,
-      type: BottomNavigationBarType.fixed,
-    ),
-    dividerTheme: const DividerThemeData(color: _border, space: 1, thickness: 1),
+    dividerTheme: DividerThemeData(color: border, space: 1, thickness: 1),
   );
 }
-
-// ── Shared widget helpers ────────────────────────────────────────────────────
 
 class PsStatusChip extends StatelessWidget {
   final String status;
   const PsStatusChip(this.status, {super.key});
-
   @override
   Widget build(BuildContext context) {
-    final config = {
-      'available':   [const Color(0xFFDCFCE7), const Color(0xFF166534), 'Available'],
-      'reserved':    [const Color(0xFFFEF3C7), const Color(0xFF92400E), 'Reserved'],
-      'in_delivery': [const Color(0xFFDBEAFE), const Color(0xFF1E40AF), 'In Delivery'],
-      'offline':     [_bg, _text3, 'Offline'],
-      'open':        [const Color(0xFFDCFCE7), const Color(0xFF166534), 'Open'],
-      'in_progress': [const Color(0xFFDBEAFE), const Color(0xFF1E40AF), 'In Progress'],
-      'completed':   [_bg, _text3, 'Done'],
-      'active':      [const Color(0xFFDCFCE7), const Color(0xFF166534), 'Active'],
-      'pending':     [const Color(0xFFFEF3C7), const Color(0xFF92400E), 'Pending'],
-      'cancelled':   [const Color(0xFFFEE2E2), const Color(0xFF991B1B), 'Cancelled'],
-    };
-    final c = config[status] ?? [_bg, _text3, status];
+    final positive = {'available', 'open', 'active'}.contains(status);
+    final warning = {'reserved', 'pending'}.contains(status);
+    final danger = status == 'cancelled';
+    final label = {
+          'available': 'Available',
+          'in_delivery': 'In delivery',
+          'in_progress': 'In progress',
+          'completed': 'Done',
+          'active': 'Active',
+          'pending': 'Pending',
+          'cancelled': 'Cancelled',
+          'open': 'Open'
+        }[status] ??
+        status;
+    final color = danger
+        ? const Color(0xFFDC2626)
+        : warning
+            ? const Color(0xFFD97706)
+            : positive
+                ? psOrange
+                : Theme.of(context).colorScheme.onSurfaceVariant;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: c[0] as Color,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        c[2] as String,
-        style: TextStyle(color: c[1] as Color, fontSize: 11, fontWeight: FontWeight.w700),
-      ),
-    );
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+            color: color.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(7)),
+        child: Text(label,
+            style: TextStyle(
+                color: color, fontSize: 11, fontWeight: FontWeight.w700)));
   }
 }
 
@@ -143,35 +162,27 @@ class PsCard extends StatelessWidget {
   final VoidCallback? onTap;
   final EdgeInsetsGeometry? padding;
   const PsCard({required this.child, this.onTap, this.padding, super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return Card(
+  Widget build(BuildContext context) => Card(
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(padding: padding ?? const EdgeInsets.all(16), child: child),
-      ),
-    );
-  }
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+              padding: padding ?? const EdgeInsets.all(16), child: child)));
 }
 
 class PsPointsBadge extends StatelessWidget {
   final int points;
   const PsPointsBadge(this.points, {super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: _greenLight, borderRadius: BorderRadius.circular(999)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        const Text('🌿', style: TextStyle(fontSize: 13)),
-        const SizedBox(width: 4),
-        Text('$points pts', style: const TextStyle(color: _greenDark, fontWeight: FontWeight.w700, fontSize: 13)),
-      ]),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+          color: psOrange.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(8)),
+      child: Text('$points pts',
+          style: const TextStyle(
+              color: psOrange, fontWeight: FontWeight.w700, fontSize: 12)));
 }
 
 class PsEmptyState extends StatelessWidget {
@@ -179,24 +190,32 @@ class PsEmptyState extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget? action;
-  const PsEmptyState({required this.icon, required this.title, this.subtitle, this.action, super.key});
-
+  const PsEmptyState(
+      {required this.icon,
+      required this.title,
+      this.subtitle,
+      this.action,
+      super.key});
   @override
-  Widget build(BuildContext context) {
-    return Center(
+  Widget build(BuildContext context) => Center(
       child: Padding(
-        padding: const EdgeInsets.all(48),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(icon, style: const TextStyle(fontSize: 56)),
-          const SizedBox(height: 16),
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _text2)),
-          if (subtitle != null) ...[
-            const SizedBox(height: 8),
-            Text(subtitle!, style: const TextStyle(fontSize: 14, color: _text3), textAlign: TextAlign.center),
-          ],
-          if (action != null) ...[const SizedBox(height: 20), action!],
-        ]),
-      ),
-    );
-  }
+          padding: const EdgeInsets.all(40),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.inbox_outlined,
+                size: 40,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            const SizedBox(height: 14),
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            if (subtitle != null) ...[
+              const SizedBox(height: 6),
+              Text(subtitle!,
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  textAlign: TextAlign.center)
+            ],
+            if (action != null) ...[const SizedBox(height: 20), action!],
+          ])));
 }

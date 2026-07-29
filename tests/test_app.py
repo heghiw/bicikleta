@@ -138,6 +138,20 @@ def test_get_profile():
     assert r.json()["email"] == "prof@test.com"
 
 
+def test_verification_files_require_authorization():
+    registered = _register("private-files@test.com")
+    user = registered.json()
+    public_path = user["id_document_url"]
+    assert client.get(public_path).status_code == 404
+
+    headers = _headers("private-files@test.com")
+    protected = client.get(
+        f"/api/v1/users/{user['id']}/verification-files/document",
+        headers=headers,
+    )
+    assert protected.status_code == 200
+
+
 def test_update_name():
     _register("upd@test.com")
     h = _headers("upd@test.com")
@@ -215,25 +229,59 @@ def test_delete_bike_owner_only():
 # ---------------------------------------------------------------------------
 
 def test_full_rental_flow():
-    bike_r, owner_h = _create_bike("bike_owner@test.com", current_lat=52.520, current_lon=13.405)
+    bike_r, owner_h = _create_bike("bike_owner@test.com", current_lat=50.0755, current_lon=14.4378)
     bike_id = bike_r.json()["id"]
 
     _register("renter@test.com")
     _make_verified("renter@test.com")
     renter_h = _headers("renter@test.com")
 
+    first_identity = client.get(f"/api/bikes/{bike_id}/identity", headers=owner_h).json()
+    identity = client.post(f"/api/bikes/{bike_id}/identity/rotate", headers=owner_h).json()
+    assert identity["identity_qr"] != first_identity["identity_qr"]
+    payment = client.post("/api/rentals/payment-intent", json={"bike_id": bike_id},
+                          headers=renter_h)
+    assert payment.status_code == 200
+    assert payment.json()["provider"] == "demo"
+
     # Book
-    r = client.post("/api/rentals/", json={"bike_id": bike_id, "pickup_lat": 52.520, "pickup_lon": 13.405}, headers=renter_h)
+    r = client.post("/api/rentals/", json={"bike_id": bike_id, "pickup_lat": 50.0755, "pickup_lon": 14.4378,
+                                           "payment_intent_id": payment.json()["payment_intent_id"]}, headers=renter_h)
     assert r.status_code == 201
     rental_id = r.json()["id"]
 
     # Start
-    r = client.post(f"/api/rentals/{rental_id}/start", headers=renter_h)
+    invalid = client.post(f"/api/rentals/{rental_id}/start",
+                          json={"bike_qr": "BICI:9999:invalid"}, headers=renter_h)
+    assert invalid.status_code == 403
+    r = client.post(f"/api/rentals/{rental_id}/start",
+                    json={"bike_qr": identity["identity_qr"]}, headers=renter_h)
     assert r.status_code == 200
     assert r.json()["status"] == "active"
 
+    second_bike = client.post("/api/bikes/", json={
+        "title": "Second bike", "description": "Conflict check", "type": "city",
+        "hourly_price": 3, "daily_price": 15, "deposit": 30,
+        "current_lat": 50.0755, "current_lon": 14.4378,
+    }, headers=owner_h)
+    assert second_bike.status_code == 201
+    conflict = client.post("/api/rentals/", json={
+        "bike_id": second_bike.json()["id"], "pickup_lat": 50.0755,
+        "pickup_lon": 14.4378, "payment_intent_id": "demo_conflict",
+    }, headers=renter_h)
+    assert conflict.status_code == 409
+
     # End
-    r = client.post(f"/api/rentals/{rental_id}/end", json={"return_lat": 52.530, "return_lon": 13.415}, headers=renter_h)
+    photo = client.post(f"/api/rentals/{rental_id}/return-photo",
+                        files={"photo": ("parked.jpg", b"fake-jpeg", "image/jpeg")}, headers=renter_h)
+    assert photo.status_code == 200
+    outside = client.post(f"/api/rentals/{rental_id}/end",
+                          json={"return_lat": 49.9, "return_lon": 14.1,
+                                "lock_confirmed": True}, headers=renter_h)
+    assert outside.status_code == 400
+    r = client.post(f"/api/rentals/{rental_id}/end",
+                    json={"return_lat": 50.0756, "return_lon": 14.4379,
+                          "lock_confirmed": True}, headers=renter_h)
     assert r.status_code == 200
     assert r.json()["status"] == "completed"
     assert r.json()["total_price"] >= 0
@@ -250,9 +298,11 @@ def test_cannot_book_unavailable_bike():
     _make_verified("renter2@test.com")
     h = _headers("renter2@test.com")
     # Book once
-    client.post("/api/rentals/", json={"bike_id": bike_id, "pickup_lat": 52.52, "pickup_lon": 13.405}, headers=h)
+    client.post("/api/rentals/", json={"bike_id": bike_id, "pickup_lat": 52.52, "pickup_lon": 13.405,
+                                       "payment_intent_id": "demo_unavailable_1"}, headers=h)
     # Try booking again — should fail
-    r = client.post("/api/rentals/", json={"bike_id": bike_id, "pickup_lat": 52.52, "pickup_lon": 13.405}, headers=h)
+    r = client.post("/api/rentals/", json={"bike_id": bike_id, "pickup_lat": 52.52, "pickup_lon": 13.405,
+                                           "payment_intent_id": "demo_unavailable_2"}, headers=h)
     assert r.status_code == 409
 
 
@@ -313,6 +363,51 @@ def test_relay_delivery():
     # Job should be open again for next courier
     job = client.get(f"/api/delivery/jobs/{job_id}", headers=a_h).json()
     assert job["status"] == "open"
+
+
+def test_directional_delivery_search_matches_forward_jobs():
+    bike_r, owner_h = _create_bike(
+        "direction_owner@test.com", current_lat=52.520, current_lon=13.405
+    )
+    client.post("/api/delivery/jobs", json={
+        "bike_id": bike_r.json()["id"],
+        "dropoff_lat": 52.545,
+        "dropoff_lon": 13.430,
+        "reward_points": 90,
+    }, headers=owner_h)
+
+    r = client.post("/api/delivery/jobs/directional-search", json={
+        "origin_lat": 52.515,
+        "origin_lon": 13.400,
+        "destination_lat": 52.560,
+        "destination_lon": 13.445,
+        "max_detour_km": 3,
+    }, headers=owner_h)
+    assert r.status_code == 200, r.text
+    assert r.json()
+    assert r.json()[0]["completion_type"] == "full"
+    assert r.json()[0]["estimated_reward_points"] == 90
+
+
+def test_directional_delivery_search_rejects_reverse_jobs():
+    bike_r, owner_h = _create_bike(
+        "reverse_owner@test.com", current_lat=52.550, current_lon=13.440
+    )
+    client.post("/api/delivery/jobs", json={
+        "bike_id": bike_r.json()["id"],
+        "dropoff_lat": 52.520,
+        "dropoff_lon": 13.405,
+        "reward_points": 90,
+    }, headers=owner_h)
+    r = client.post("/api/delivery/jobs/directional-search", json={
+        "origin_lat": 52.515,
+        "origin_lon": 13.400,
+        "destination_lat": 52.560,
+        "destination_lon": 13.445,
+        "max_detour_km": 3,
+    }, headers=owner_h)
+    assert r.status_code == 200
+    assert all(item["job"]["bike_id"] != bike_r.json()["id"] for item in r.json())
 
 
 # ---------------------------------------------------------------------------
@@ -379,3 +474,31 @@ def test_health():
     r = client.get("/api/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+
+
+def test_versioned_health():
+    r = client.get("/api/v1/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+
+def test_tracker_pairing_foundation():
+    bike_r, headers = _create_bike("tracker-owner@test.com")
+    bike_id = bike_r.json()["id"]
+    payload = {
+        "provider": "generic",
+        "provider_device_id": "GPS-TEST-001",
+        "connection_type": "gateway",
+        "activation_code": "not-persisted",
+    }
+    paired = client.post(f"/api/v1/bikes/{bike_id}/tracker/pair", json=payload, headers=headers)
+    assert paired.status_code == 201
+    assert paired.json()["status"] == "pending_validation"
+    assert "activation_code" not in paired.json()
+
+    fetched = client.get(f"/api/v1/bikes/{bike_id}/tracker", headers=headers)
+    assert fetched.status_code == 200
+    assert fetched.json()["provider_device_id"] == "GPS-TEST-001"
+
+    duplicate = client.post(f"/api/v1/bikes/{bike_id}/tracker/pair", json=payload, headers=headers)
+    assert duplicate.status_code == 409

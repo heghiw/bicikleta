@@ -7,7 +7,7 @@ from auth import get_current_user, require_admin
 import models
 import schemas
 
-router = APIRouter(prefix="/api/shop", tags=["shop"])
+router = APIRouter(prefix="/shop", tags=["shop"])
 
 
 @router.get("/offers", response_model=List[schemas.PartnerOfferOut])

@@ -7,7 +7,7 @@ from auth import get_current_user
 import models
 import schemas
 
-router = APIRouter(prefix="/api/gamification", tags=["gamification"])
+router = APIRouter(prefix="/gamification", tags=["gamification"])
 
 
 @router.get("/leaderboard", response_model=List[schemas.LeaderboardEntry])

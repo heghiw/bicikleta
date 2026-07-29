@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../services/api_service.dart';
+import '../services/address_service.dart';
 import '../theme.dart';
 
 class DeliveryScreen extends StatefulWidget {
@@ -12,6 +14,7 @@ class DeliveryScreen extends StatefulWidget {
 class _DeliveryScreenState extends State<DeliveryScreen> {
   List<dynamic> _jobs = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -20,28 +23,23 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final jobs = await ApiService.listOpenJobs();
-      setState(() { _jobs = jobs; _loading = false; });
+      if (!mounted) return;
+      setState(() {
+        _jobs = jobs;
+        _loading = false;
+      });
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-      setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _accept(int jobId) async {
-    try {
-      await ApiService.acceptSegment(jobId, 52.52, 13.405);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Job accepted! Go to Profile to track your delivery.'),
-          backgroundColor: Color(0xFF16A34A),
-        ));
-        _load();
-      }
-    } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: Colors.red));
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
     }
   }
 
@@ -49,7 +47,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('📦  Delivery Jobs'),
+        title: const Text('Open jobs'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
           const SizedBox(width: 8),
@@ -57,25 +55,37 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _jobs.isEmpty
-              ? const PsEmptyState(
-                  icon: '📦',
-                  title: 'No open jobs',
-                  subtitle: 'New delivery jobs are posted daily. Check back soon!',
+          : _error != null
+              ? PsEmptyState(
+                  icon: '!',
+                  title: 'Could not load open jobs',
+                  subtitle: _error,
+                  action: FilledButton(
+                      onPressed: _load, child: const Text('Try again')),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _jobs.length,
-                  itemBuilder: (_, i) => _JobCard(job: _jobs[i], onAccept: () => _accept(_jobs[i]['id'] as int)),
-                ),
+              : _jobs.isEmpty
+                  ? const PsEmptyState(
+                      icon: '',
+                      title: 'No open jobs',
+                      subtitle: 'New bike moves are posted throughout the day.',
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _jobs.length,
+                      itemBuilder: (_, i) => _JobCard(
+                        job: _jobs[i],
+                        onOpen: () =>
+                            context.push('/delivery/${_jobs[i]['id']}'),
+                      ),
+                    ),
     );
   }
 }
 
 class _JobCard extends StatelessWidget {
   final Map<String, dynamic> job;
-  final VoidCallback onAccept;
-  const _JobCard({required this.job, required this.onAccept});
+  final VoidCallback onOpen;
+  const _JobCard({required this.job, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -89,18 +99,31 @@ class _JobCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Job #${job['id']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                    Text('${(job['distance_km'] as num).toStringAsFixed(1)} km', style: const TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
+                    Text('Job #${job['id']}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 15)),
+                    Text('${(job['distance_km'] as num).toStringAsFixed(1)} km',
+                        style: const TextStyle(
+                            color: Color(0xFF6B7280), fontSize: 13)),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(8)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFCCFBF1),
+                    borderRadius: BorderRadius.circular(8)),
                 child: Column(
                   children: [
-                    Text('${job['reward_points']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF16A34A))),
-                    const Text('pts', style: TextStyle(fontSize: 11, color: Color(0xFF166534))),
+                    Text('${job['reward_points']}',
+                        style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF088F8F))),
+                    const Text('pts',
+                        style:
+                            TextStyle(fontSize: 11, color: Color(0xFF115E59))),
                   ],
                 ),
               ),
@@ -118,10 +141,12 @@ class _JobCard extends StatelessWidget {
             children: [
               PsStatusChip(job['status'] as String? ?? 'open'),
               const Spacer(),
-              ElevatedButton(
-                onPressed: job['status'] == 'open' ? onAccept : null,
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10)),
-                child: const Text('Accept'),
+              OutlinedButton(
+                onPressed: onOpen,
+                style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10)),
+                child: const Text('View details'),
               ),
             ],
           ),
@@ -133,40 +158,68 @@ class _JobCard extends StatelessWidget {
 
 class _RouteRow extends StatelessWidget {
   final double fromLat, fromLon, toLat, toLon;
-  const _RouteRow({required this.fromLat, required this.fromLon, required this.toLat, required this.toLon});
+  const _RouteRow(
+      {required this.fromLat,
+      required this.fromLon,
+      required this.toLat,
+      required this.toLon});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        _Dot(color: const Color(0xFF16A34A)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '${fromLat.toStringAsFixed(3)}, ${fromLon.toStringAsFixed(3)}',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF374151)),
-          ),
+        _AddressRow(
+          dotColor: const Color(0xFF088F8F),
+          label: 'Pickup',
+          address: AddressService.label(fromLat, fromLon),
         ),
-        Expanded(
-          child: Container(
-            height: 1,
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: const Color(0xFFE5E7EB), style: BorderStyle.solid, width: 1)),
-            ),
-          ),
+        Container(
+          height: 18,
+          margin: const EdgeInsets.only(left: 4),
+          alignment: Alignment.centerLeft,
+          child: const VerticalDivider(width: 1),
         ),
-        _Dot(color: const Color(0xFFEF4444)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '${toLat.toStringAsFixed(3)}, ${toLon.toStringAsFixed(3)}',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF374151)),
-          ),
+        _AddressRow(
+          dotColor: const Color(0xFFEF4444),
+          label: 'Drop-off',
+          address: AddressService.label(toLat, toLon),
         ),
       ],
     );
   }
+}
+
+class _AddressRow extends StatelessWidget {
+  const _AddressRow(
+      {required this.dotColor, required this.label, required this.address});
+  final Color dotColor;
+  final String label;
+  final Future<String> address;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        _Dot(color: dotColor),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 58,
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ),
+        Expanded(
+          child: FutureBuilder<String>(
+            future: address,
+            builder: (_, snapshot) => Text(
+              snapshot.data ?? 'Finding address…',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ]);
 }
 
 class _Dot extends StatelessWidget {
@@ -174,6 +227,9 @@ class _Dot extends StatelessWidget {
   const _Dot({required this.color});
   @override
   Widget build(BuildContext context) {
-    return Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+    return Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle));
   }
 }

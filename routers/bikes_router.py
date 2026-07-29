@@ -12,7 +12,9 @@ import schemas
 from models import _haversine
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
-router = APIRouter(prefix="/api/bikes", tags=["bikes"])
+MAX_PHOTO_BYTES = 10 * 1024 * 1024
+PHOTO_EXTENSIONS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+router = APIRouter(prefix="/bikes", tags=["bikes"])
 
 
 def _bike_out(bike: models.Bike, dist: Optional[float] = None) -> schemas.BikeOut:
@@ -31,6 +33,8 @@ def _bike_out(bike: models.Bike, dist: Optional[float] = None) -> schemas.BikeOu
         current_lat=bike.current_lat,
         current_lon=bike.current_lon,
         status=bike.status,
+        lock_type=bike.lock_type,
+        smart_lock_status=bike.smart_lock_status,
         avg_rating=round(bike.avg_rating(), 1),
         review_count=len(bike.reviews),
         distance_from_user=round(dist, 2) if dist is not None else None,
@@ -52,10 +56,45 @@ def create_bike(
     if not current_user.verified:
         raise HTTPException(status_code=403, detail="Account not verified")
     bike = models.Bike(owner_id=current_user.id, **body.model_dump())
+    if bike.lock_type == "smart" and bike.smart_lock_provider == "demo" and bike.smart_lock_device_id:
+        bike.smart_lock_status = "connected"
     db.add(bike)
     db.commit()
     db.refresh(bike)
     return _bike_out(bike)
+
+
+@router.get("/{bike_id}/identity", response_model=schemas.BikeIdentityOut)
+def get_bike_identity(
+    bike_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bike = db.query(models.Bike).filter(models.Bike.id == bike_id).first()
+    if not bike:
+        raise HTTPException(status_code=404, detail="Bike not found")
+    if bike.owner_id != current_user.id and current_user.role != models.UserRole.admin:
+        raise HTTPException(status_code=403, detail="Only the owner can access the QR identity")
+    return {"bike_id": bike.id, "identity_qr": bike.identity_qr, "qr_version": bike.qr_version}
+
+
+@router.post("/{bike_id}/identity/rotate", response_model=schemas.BikeIdentityOut)
+def rotate_bike_identity(
+    bike_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bike = db.query(models.Bike).filter(models.Bike.id == bike_id).first()
+    if not bike:
+        raise HTTPException(status_code=404, detail="Bike not found")
+    if bike.owner_id != current_user.id and current_user.role != models.UserRole.admin:
+        raise HTTPException(status_code=403, detail="Only the owner can rotate the QR identity")
+    if bike.status == models.BikeStatus.reserved:
+        raise HTTPException(status_code=409, detail="Cannot rotate QR during a reservation or ride")
+    bike.qr_version += 1
+    db.commit()
+    db.refresh(bike)
+    return {"bike_id": bike.id, "identity_qr": bike.identity_qr, "qr_version": bike.qr_version}
 
 
 @router.post("/{bike_id}/photos", response_model=schemas.BikeOut)
@@ -70,11 +109,16 @@ async def upload_photos(
     os.makedirs(dest, exist_ok=True)
     urls = list(bike.photo_urls)
     for photo in photos:
-        ext = os.path.splitext(photo.filename or "")[-1] or ".jpg"
+        ext = PHOTO_EXTENSIONS.get(photo.content_type or "")
+        if not ext:
+            raise HTTPException(status_code=415, detail="Bike photos must be JPEG, PNG, or WebP")
+        content = await photo.read(MAX_PHOTO_BYTES + 1)
+        if len(content) > MAX_PHOTO_BYTES:
+            raise HTTPException(status_code=413, detail="Bike photos must be 10 MB or smaller")
         filename = f"{uuid.uuid4().hex}{ext}"
         filepath = os.path.join(dest, filename)
         async with aiofiles.open(filepath, "wb") as f:
-            await f.write(await photo.read())
+            await f.write(content)
         urls.append(f"/uploads/bike_photos/{filename}")
     bike.photo_urls = urls
     db.commit()
@@ -104,6 +148,8 @@ def delete_bike(
     db: Session = Depends(get_db),
 ):
     bike = _get_or_403(db, bike_id, current_user.id)
+    if bike.status in (models.BikeStatus.reserved, models.BikeStatus.in_delivery):
+        raise HTTPException(status_code=409, detail="Bike cannot be deleted during an active rental or delivery")
     db.delete(bike)
     db.commit()
 

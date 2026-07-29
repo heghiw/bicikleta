@@ -19,7 +19,7 @@ from jose import JWTError, jwt
 import models
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/location", tags=["location"])
+router = APIRouter(prefix="/location", tags=["location"])
 
 _connections: Dict[str, List[WebSocket]] = {}
 
